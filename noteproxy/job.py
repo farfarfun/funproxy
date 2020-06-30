@@ -1,6 +1,7 @@
 import re
 from time import sleep
 
+import demjson
 import requests
 from lxml import etree
 
@@ -41,14 +42,15 @@ class GetFreeProxy(object):
                    (self.freeProxy13, 2),
                    (self.freeProxy14, 2),
                    (self.freeProxy15, 3),
-                   (self.apiProxy1, 5)
+                   (self.apiProxy1, 5),
+                   (self.apiProxy2, 5)
                    ]
         for line in methods:
             if line[1] >= level:
                 method = line[0]
                 for proxy in method():
-                    if len(proxy) > 5:
-                        self.proxy_db.insert({'proxy': proxy})
+                    if isinstance(proxy, dict) and len(proxy['proxy']) > 5:
+                        self.proxy_db.insert(proxy)
 
                 # print('{} done'.format(method))
 
@@ -326,7 +328,7 @@ class GetFreeProxy(object):
             r = requests.get(url, timeout=10)
             ips = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}", r.text)
             for ip in ips:
-                yield ip.strip()
+                yield {'proxy': ip.strip()}
 
     @staticmethod  # 1
     def apiProxy1():
@@ -345,9 +347,35 @@ class GetFreeProxy(object):
 
         if len(response.text) > 20:
             for proxy in response.text.split(' '):
-                yield proxy
+                yield {'proxy': proxy, 'from_url': 'xiladaili'}
         else:
             res = '222.85.28.130:52590 58.220.95.80:9401 58.220.95.86:9401 119.178.101.18:8888 221.122.91.76:9480 58.220.95.78:9401 58.220.95.79:10000 1.119.166.180:8080 183.220.145.3:80 221.122.91.75:10286 150.138.253.71:808 221.122.91.74:9401'
             for proxy in res:
-                yield proxy
+                yield {'proxy': proxy, 'from_url': 'xiladaili'}
             print(response.text)
+
+    @staticmethod  # 1
+    def apiProxy2():
+        params = {
+            'apikey': 'e207a65392ddc530997b8d8547cd3273bcb7f057',
+            'num': '50',
+            'type': 'json',
+            'line': 'win',
+            'proxy_type': 'putong',
+            'sort': '1',
+            'model': 'all',
+            'protocol': 'https',
+            'address': '',
+            'kill_address': '',
+            'port': '',
+            'kill_port': '',
+            'today': 'true',
+            'abroad': '1',
+            'isp': '',
+            'anonymity': '',
+        }
+
+        response = requests.get('http://dev.qydailiip.com/api/', params=params, verify=False, )
+        if len(response.text) > 20:
+            for proxy in demjson.decode(response.text):
+                yield {'proxy': proxy, 'from_url': 'qydailiip'}

@@ -49,7 +49,7 @@ class ProxyPool(Node):
     def job(self):
         if self.qsize(0) < 50:
             proxies = self.proxy_db.select(
-                "select proxy from table_name where state>=1 order by update_time limit 20 ")
+                "select proxy from table_name where state>=1 order by update_time desc limit 20 ")
 
             for proxy in proxies:
                 self.put(proxy[0], index=0)
