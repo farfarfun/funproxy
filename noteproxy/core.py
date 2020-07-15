@@ -47,9 +47,9 @@ class ProxyPool(Node):
         self.proxy_db = ProxyDB()
 
     def job(self):
-        if self.qsize(0) < 50:
+        if self.qsize(0) < 1000:
             proxies = self.proxy_db.select(
-                "select proxy from table_name where state>=1 order by update_time desc limit 20 ")
+                "select proxy from table_name where state>=1 order by update_time desc limit 1000 ")
 
             for proxy in proxies:
                 self.put(proxy[0], index=0)
@@ -59,4 +59,4 @@ class ProxyPool(Node):
             self.proxy_db.delete({'proxy': proxy})
             self.logger.info("delete {}".format(proxy))
         job = GetFreeProxy()
-        job.run(5)
+        job.run(1)
