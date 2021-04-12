@@ -1,0 +1,3 @@
+.buildozer
+/noteproxy/app/.buildozer/
+/noteproxy/app/bin/
