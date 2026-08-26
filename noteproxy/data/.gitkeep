@@ -1,0 +1,2 @@
+# 占位文件：noteproxy/database.py 默认把 SQLite 建在本目录下的 proxy.db。
+# git 不跟踪空目录，缺了这个文件目录会消失，sqlite3 会报 unable to open database file。
