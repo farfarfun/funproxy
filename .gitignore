@@ -268,3 +268,6 @@ build/
 .specstory/
 CLAUDE.local.md
 AGENTS.local.md
+
+# runtime cache, recreated automatically by ProxyDB
+noteproxy/data/proxy.db
