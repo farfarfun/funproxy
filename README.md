@@ -1,2 +1,2 @@
-# noteproxy
+# funproxy
 proxy-pool

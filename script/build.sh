@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-name=noteproxy
+name=funproxy
 echo $name
 
 if [ "$1" = "build" ]; then

@@ -1,7 +1,7 @@
 from requests import Session
 
-from noteproxy.database import ProxyDB
-from noteproxy.job import GetFreeProxy
+from funproxy.database import ProxyDB
+from funproxy.job import GetFreeProxy
 from notetool.crawler.core import Node
 
 

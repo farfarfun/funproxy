@@ -5,7 +5,7 @@ import demjson
 import requests
 from lxml import etree
 
-from noteproxy.database import ProxyDB
+from funproxy.database import ProxyDB
 
 
 def getHtmlTree(url):
