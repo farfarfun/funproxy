@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "牛哥", email = "farfarfun@qq.com" }]
-dependencies = []
+dependencies = ["demjson3>=3.0.6", "farlog>=1.1.7", "funshell>=1.0.19", "lxml>=5.0", "requests>=2.31"]
 
 [dependency-groups]
 dev = ["pytest>=8.0.0"]
@@ -17,4 +17,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["funproxy"]
+packages = ["src/funproxy"]

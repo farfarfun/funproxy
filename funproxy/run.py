@@ -1,4 +1,0 @@
-from funproxy.job import GetFreeProxy
-
-job = GetFreeProxy()
-job.run(5)

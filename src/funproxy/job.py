@@ -1,14 +1,20 @@
 import re
+import os
 from time import sleep
+from collections.abc import Iterator
 
-import demjson
+import demjson3 as demjson
 import requests
+from farlog import getLogger
 from lxml import etree
 
 from funproxy.database import ProxyDB
 
+logger = getLogger("funproxy")
 
-def getHtmlTree(url):
+
+def get_html_tree(url: str):
+    """请求 URL 并解析为 HTML 节点树。"""
     header = {'Connection': 'keep-alive',
               'Cache-Control': 'max-age=0',
               'Upgrade-Insecure-Requests': '1',
@@ -21,29 +27,35 @@ def getHtmlTree(url):
     return etree.HTML(html)
 
 
-class GetFreeProxy(object):
+# Backward-compatible alias for existing consumers.
+getHtmlTree = get_html_tree
 
-    def __init__(self):
+
+class GetFreeProxy:
+    """从公开代理源采集代理记录。"""
+
+    def __init__(self) -> None:
         self.proxy_db = ProxyDB()
 
-    def run(self, level=5):
-        methods = [(self.freeProxy01, -1),
-                   (self.freeProxy02, 1),
-                   (self.freeProxy03, 0),
-                   (self.freeProxy04, 1),
-                   (self.freeProxy05, 1),
-                   (self.freeProxy06, 0),
-                   (self.freeProxy07, 1),
-                   (self.freeProxy08, 0),
-                   (self.freeProxy09, 1),
-                   (self.freeProxy10, -1),
-                   (self.freeProxy11, 0),
-                   (self.freeProxy12, -1),
-                   (self.freeProxy13, 2),
-                   (self.freeProxy14, 2),
-                   (self.freeProxy15, 3),
-                   (self.apiProxy1, 5),
-                   (self.apiProxy2, 5)
+    def run(self, level: int = 5) -> None:
+        """运行指定等级以上的代理采集器并写入代理池。"""
+        methods = [(self.free_proxy_01, -1),
+                   (self.free_proxy_02, 1),
+                   (self.free_proxy_03, 0),
+                   (self.free_proxy_04, 1),
+                   (self.free_proxy_05, 1),
+                   (self.free_proxy_06, 0),
+                   (self.free_proxy_07, 1),
+                   (self.free_proxy_08, 0),
+                   (self.free_proxy_09, 1),
+                   (self.free_proxy_10, -1),
+                   (self.free_proxy_11, 0),
+                   (self.free_proxy_12, -1),
+                   (self.free_proxy_13, 2),
+                   (self.free_proxy_14, 2),
+                   (self.free_proxy_15, 3),
+                   (self.api_proxy_1, 5),
+                   (self.api_proxy_2, 5)
                    ]
         for line in methods:
             if line[1] >= level:
@@ -52,14 +64,13 @@ class GetFreeProxy(object):
                     if isinstance(proxy, dict) and len(proxy['proxy']) > 5:
                         self.proxy_db.insert(proxy)
 
-                # print('{} done'.format(method))
-
-    def test(self):
-        for proxy in self.freeProxy15():
-            print(proxy)
+    def test(self) -> None:
+        """输出一个采集器发现的代理，用于手工检查。"""
+        for proxy in self.free_proxy_15():
+            logger.info("发现代理 %s", proxy)
 
     @staticmethod  # -1
-    def freeProxy01():
+    def free_proxy_01() -> Iterator[dict[str, str]]:
         """
         无忧代理 http://www.data5u.com/
         几乎没有能用的
@@ -85,11 +96,11 @@ class GetFreeProxy(object):
                         port_sum += key.index(c)
                     port = port_sum >> 3
                     yield {'proxy': '{}:{}'.format(ip, port), 'from_url': 'data5u'}
-                except Exception as e:
-                    print(e)
+                except (IndexError, ValueError, AttributeError) as e:
+                    logger.warning("解析代理失败: %s", e)
 
     @staticmethod  # 1
-    def freeProxy02(count=50):
+    def free_proxy_02(count: int = 50) -> Iterator[dict[str, str]]:
         """
         代理66 http://www.66ip.cn/
         :param count: 提取数量
@@ -107,11 +118,11 @@ class GetFreeProxy(object):
                 ips = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}", html)
                 for ip in ips:
                     yield {'proxy': ip.strip(), 'from_url': '66ip'}
-            except Exception as e:
-                print(e)
+            except (requests.RequestException, AttributeError) as e:
+                logger.warning("读取代理失败: %s", e)
 
     @staticmethod  # 0
-    def freeProxy03(page_count=1):
+    def free_proxy_03(page_count: int = 1) -> Iterator[dict[str, str]]:
         """
         西刺代理 http://www.xicidaili.com
         :return:
@@ -123,16 +134,16 @@ class GetFreeProxy(object):
         for each_url in url_list:
             for i in range(1, page_count + 1):
                 page_url = each_url + str(i)
-                tree = getHtmlTree(page_url)
+                tree = get_html_tree(page_url)
                 proxy_list = tree.xpath('.//table[@id="ip_list"]//tr[position()>1]')
                 for proxy in proxy_list:
                     try:
                         yield {'proxy': ':'.join(proxy.xpath('./td/text()')[0:2]), 'from_url': 'xicidaili'}
-                    except Exception as e:
-                        pass
+                    except (IndexError, ValueError) as e:
+                        logger.warning("解析代理失败: %s", e)
 
     @staticmethod  # 1
-    def freeProxy04():
+    def free_proxy_04() -> Iterator[dict[str, str]]:
 
         """
         # 此网站有隐藏的数字干扰，或抓取到多余的数字或.符号
@@ -149,7 +160,7 @@ class GetFreeProxy(object):
         """
         url = "http://www.goubanjia.com/"
 
-        tree = getHtmlTree(url)
+        tree = get_html_tree(url)
         proxy_list = tree.xpath('//td[@class="ip"]')
         xpath_str = """.//*[not(contains(@style, 'display: none')) and not(contains(@style, 'display:none'))
                                         and not(contains(@class, 'port')) ]/text()"""
@@ -163,11 +174,11 @@ class GetFreeProxy(object):
                 port /= 8
 
                 yield {'proxy': '{}:{}'.format(ip_addr, int(port)), 'from_url': 'goubanjia'}
-            except Exception as e:
-                print(e)
+            except (IndexError, ValueError, TypeError, AttributeError) as e:
+                logger.warning("解析代理失败: %s", e)
 
     @staticmethod  # 1
-    def freeProxy05():
+    def free_proxy_05() -> Iterator[dict[str, str]]:
         """
         快代理 https://www.kuaidaili.com
         """
@@ -176,27 +187,27 @@ class GetFreeProxy(object):
             'https://www.kuaidaili.com/free/intr/'
         ]
         for url in url_list:
-            tree = getHtmlTree(url)
+            tree = get_html_tree(url)
             proxy_list = tree.xpath('.//table//tr')
             sleep(1)  # 必须sleep 不然第二条请求不到数据
             for tr in proxy_list[1:]:
                 yield {'proxy': ':'.join(tr.xpath('./td/text()')[0:2]), 'from_url': 'kuaidaili'}
 
     @staticmethod  # 0
-    def freeProxy06():
+    def free_proxy_06() -> Iterator[dict[str, str]]:
         """
         码农代理 https://proxy.coderbusy.com/
         :return:
         """
         urls = ['https://proxy.coderbusy.com/']
         for url in urls:
-            tree = getHtmlTree(url)
+            tree = get_html_tree(url)
             proxy_list = tree.xpath('.//table//tr')
             for tr in proxy_list[1:]:
                 yield {'proxy': ':'.join(tr.xpath('./td/text()')[0:2]), 'from_url': 'proxy.coderbusy'}
 
     @staticmethod  # 1
-    def freeProxy07():
+    def free_proxy_07() -> Iterator[dict[str, str]]:
         """
         云代理 http://www.ip3366.net/free/
         :return:
@@ -209,7 +220,7 @@ class GetFreeProxy(object):
                 yield {'proxy': ':'.join(proxy), 'from_url': 'ip3366'}
 
     @staticmethod  # 0
-    def freeProxy08():
+    def free_proxy_08() -> Iterator[dict[str, str]]:
         """
         IP海 http://www.iphai.com/free/ng
         :return:
@@ -229,7 +240,7 @@ class GetFreeProxy(object):
                 yield {'proxy': ':'.join(proxy), 'from_url': 'iphai'}
 
     @staticmethod  # 1
-    def freeProxy09(page_count=1):
+    def free_proxy_09(page_count: int = 1) -> Iterator[dict[str, str]]:
         """
         http://ip.jiangxianli.com/?page=
         免费代理库
@@ -237,14 +248,14 @@ class GetFreeProxy(object):
         """
         for i in range(1, page_count + 1):
             url = 'http://ip.jiangxianli.com/?country=中国&?page={}'.format(i)
-            html_tree = getHtmlTree(url)
+            html_tree = get_html_tree(url)
             for index, tr in enumerate(html_tree.xpath("//table//tr")):
                 if index == 0:
                     continue
                 yield {'proxy': ":".join(tr.xpath("./td/text()")[0:2]).strip(), 'from_url': 'jiangxianli'}
 
     @staticmethod  # -1
-    def freeProxy10():
+    def free_proxy_10() -> Iterator[dict[str, str]]:
         """
         墙外网站 cn-proxy
         :return:
@@ -258,7 +269,7 @@ class GetFreeProxy(object):
                 yield {'proxy': ':'.join(proxy), 'from_url': 'cn-proxy'}
 
     @staticmethod  # 0
-    def freeProxy11():
+    def free_proxy_11() -> Iterator[dict[str, str]]:
         """
         https://proxy-list.org/english/index.php
         :return:
@@ -273,7 +284,7 @@ class GetFreeProxy(object):
                 yield {'proxy': base64.b64decode(proxy).decode(), 'from_url': 'proxy-list'}
 
     @staticmethod  # -1
-    def freeProxy12():
+    def free_proxy_12() -> Iterator[dict[str, str]]:
         urls = ['https://list.proxylistplus.com/Fresh-HTTP-Proxy-List-1']
 
         for url in urls:
@@ -283,7 +294,7 @@ class GetFreeProxy(object):
                 yield {'proxy': ':'.join(proxy), 'from_url': 'proxylistplus'}
 
     @staticmethod  # 1
-    def freeProxy13(max_page=2):
+    def free_proxy_13(max_page: int = 2) -> Iterator[dict[str, str]]:
         """
         http://www.qydaili.com/free/?action=china&page=1
         齐云代理
@@ -300,7 +311,7 @@ class GetFreeProxy(object):
                 yield {'proxy': ':'.join(proxy), 'from_url': 'qydaili'}
 
     @staticmethod  # 1
-    def freeProxy14(max_page=2):
+    def free_proxy_14(max_page: int = 2) -> Iterator[dict[str, str]]:
         """
         http://www.89ip.cn/index.html
         89免费代理
@@ -319,7 +330,7 @@ class GetFreeProxy(object):
                 yield {'proxy': ':'.join(proxy), 'from_url': '89ip'}
 
     @staticmethod  # 1
-    def freeProxy15():
+    def free_proxy_15() -> Iterator[dict[str, str]]:
         urls = ['http://www.xiladaili.com/putong/',
                 "http://www.xiladaili.com/gaoni/",
                 "http://www.xiladaili.com/http/",
@@ -331,9 +342,14 @@ class GetFreeProxy(object):
                 yield {'proxy': ip.strip()}
 
     @staticmethod  # 1
-    def apiProxy1():
+    def api_proxy_1() -> Iterator[dict[str, str]]:
+        """从 Xila 代理 API 获取代理，需要环境变量凭据。"""
+        uuid = os.getenv("FUNPROXY_XILA_UUID")
+        if not uuid:
+            logger.warning("未配置 FUNPROXY_XILA_UUID，跳过 Xila API")
+            return
         params = {
-            'uuid': 'b6be7adb55b6464dbde573ce9362081f',
+            'uuid': uuid,
             'num': 50,
             'protocol': 2,
             'sortby': 2,
@@ -349,14 +365,19 @@ class GetFreeProxy(object):
                 yield {'proxy': proxy, 'from_url': 'xiladaili'}
         else:
             res = '222.85.28.130:52590 58.220.95.80:9401 58.220.95.86:9401 119.178.101.18:8888 221.122.91.76:9480 58.220.95.78:9401 58.220.95.79:10000 1.119.166.180:8080 183.220.145.3:80 221.122.91.75:10286 150.138.253.71:808 221.122.91.74:9401'
-            for proxy in res:
+            for proxy in res.split():
                 yield {'proxy': proxy, 'from_url': 'xiladaili'}
-            print(response.text)
+            logger.warning("Xila API 返回内容不足")
 
     @staticmethod  # 1
-    def apiProxy2():
+    def api_proxy_2() -> Iterator[dict[str, str]]:
+        """从齐云代理 API 获取代理，需要环境变量凭据。"""
+        apikey = os.getenv("FUNPROXY_QYDAILI_APIKEY")
+        if not apikey:
+            logger.warning("未配置 FUNPROXY_QYDAILI_APIKEY，跳过齐云 API")
+            return
         params = {
-            'apikey': 'e207a65392ddc530997b8d8547cd3273bcb7f057',
+            'apikey': apikey,
             'num': '50',
             'type': 'json',
             'line': 'win',

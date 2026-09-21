@@ -271,3 +271,11 @@ AGENTS.local.md
 
 # runtime cache, recreated automatically by ProxyDB
 noteproxy/data/proxy.db
+*.db
+*.rar
+.venv/
+.run/
+logs/
+.idea/
+.vscode/
+node_modules/
