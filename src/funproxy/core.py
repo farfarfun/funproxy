@@ -18,9 +18,9 @@ logger = getLogger("funproxy")
 
 class ProxyJob:
     """从代理池获取并切换 HTTP 代理。"""
-    proxy_db = ProxyDB()
-
-    def __init__(self) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
+        """创建代理任务；数据库路径可由调用方注入。"""
+        self.proxy_db = ProxyDB(db_path=db_path)
         self.proxy = ""
         self.proxies = ""
         self.get_proxy()
@@ -61,6 +61,7 @@ class ProxyPool(Node):
         self.proxy_db = ProxyDB()
 
     def job(self) -> None:
+        """从代理池读取、投递并删除已处理的代理。"""
         if self.qsize(0) < 1000:
             proxies = self.proxy_db.select(
                 "select proxy from proxy_pool where state>=1 order by update_time desc limit 1000 ")

@@ -45,7 +45,7 @@ class ProxyDB:
             db.commit()
         self.columns = ['proxy', 'proxy_ip', 'proxy_port', 'from_url', 'update_time', 'state']
 
-    def insert(self, properties: dict, *args, **kwargs) -> None:
+    def insert(self, properties: dict[str, object], *args: object, **kwargs: object) -> None:
         values = self.extend_columns(dict(properties))
         columns = ",".join(values)
         marks = ",".join("?" for _ in values)
@@ -53,7 +53,7 @@ class ProxyDB:
             db.execute(f"insert or replace into {self.table_name} ({columns}) values ({marks})", tuple(values.values()))
             db.commit()
 
-    def delete(self, properties: dict, *args, **kwargs) -> None:
+    def delete(self, properties: dict[str, object], *args: object, **kwargs: object) -> None:
         properties = self.extend_columns(properties)
         properties['state'] = -1
         condition = {'proxy': properties.pop('proxy')}
@@ -61,7 +61,7 @@ class ProxyDB:
             db.execute(f"update {self.table_name} set state=? where proxy=?", (-1, condition["proxy"]))
             db.commit()
 
-    def count(self, properties: dict, *args, **kwargs) -> int:
+    def count(self, properties: dict[str, object], *args: object, **kwargs: object) -> int:
         values = self.extend_columns(dict(properties))
         where = " and ".join(f"{key}=?" for key in values)
         with sqlite3.connect(self.db_path) as db:
@@ -73,7 +73,7 @@ class ProxyDB:
             return db.execute(query, args).fetchall()
 
     @staticmethod
-    def extend_columns(properties: dict) -> dict:
+    def extend_columns(properties: dict[str, object]) -> dict[str, object]:
         properties['update_time'] = int(time.time())
         if 'proxy' in properties.keys():
             properties['proxy_ip'], properties['proxy_port'] = properties['proxy'].split(':')

@@ -13,8 +13,15 @@ from funproxy.database import ProxyDB
 logger = getLogger("funproxy")
 
 
-def get_html_tree(url: str):
-    """请求 URL 并解析为 HTML 节点树。"""
+def get_html_tree(url: str) -> etree._Element | None:
+    """请求 URL 并解析为 HTML 节点树。
+
+    Args:
+        url: 待请求的网页地址。
+
+    Returns:
+        解析后的 HTML 根节点，解析失败时返回 None。
+    """
     header = {'Connection': 'keep-alive',
               'Cache-Control': 'max-age=0',
               'Upgrade-Insecure-Requests': '1',
