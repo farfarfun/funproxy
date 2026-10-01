@@ -1,5 +1,6 @@
 from requests import Session
 from farlog import getLogger
+from typing import Any
 
 from funproxy.database import ProxyDB
 from funproxy.job import GetFreeProxy
@@ -9,7 +10,7 @@ except ImportError:
     class Node:
         """无 notetool 时保证代理池模块可导入的兼容基类。"""
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
 
@@ -19,17 +20,27 @@ logger = getLogger("funproxy")
 class ProxyJob:
     """从代理池获取并切换 HTTP 代理。"""
     def __init__(self, db_path: str | None = None) -> None:
-        """创建代理任务；数据库路径可由调用方注入。"""
+        """创建代理任务。
+
+        Args:
+            db_path: SQLite 文件路径；未提供时由 ProxyDB 解析默认路径。
+        """
         self.proxy_db = ProxyDB(db_path=db_path)
         self.proxy = ""
         self.proxies = ""
         self.get_proxy()
 
     def delete_proxy(self) -> None:
+        """将当前代理标记为已删除。"""
         logger.info("删除代理 %s", self.proxy)
         self.proxy_db.delete({'proxy': self.proxy})
 
     def change_proxy(self, sess: Session) -> None:
+        """从数据库选择代理并更新请求会话。
+
+        Args:
+            sess: 要更新 proxies 配置的 requests 会话。
+        """
         self.get_proxy()
         sess.proxies.update({
             "http": "http://{}".format(self.proxy),
@@ -37,6 +48,11 @@ class ProxyJob:
         })
 
     def get_proxy(self) -> str | None:
+        """选择最近更新的可用代理。
+
+        Returns:
+            代理地址；代理池为空时返回 None。
+        """
         res = self.proxy_db.select("select proxy from proxy_pool where state>=1 order by update_time desc limit 10 ")
 
         if res is None or len(res) == 0:
@@ -56,12 +72,23 @@ class ProxyJob:
 class ProxyPool(Node):
     """向 notetool 节点队列提供代理任务。"""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, db_path: str | None = None, **kwargs: Any) -> None:
+        """创建代理池节点。
+
+        Args:
+            *args: 传给 notetool Node 的位置参数。
+            db_path: SQLite 文件路径；未提供时由 ProxyDB 解析默认路径。
+            **kwargs: 传给 notetool Node 的关键字参数。
+        """
         super(ProxyPool, self).__init__(*args, **kwargs)
-        self.proxy_db = ProxyDB()
+        self.proxy_db = ProxyDB(db_path=db_path)
 
     def job(self) -> None:
-        """从代理池读取、投递并删除已处理的代理。"""
+        """从代理池读取、投递并删除已处理的代理。
+
+        Returns:
+            None。
+        """
         if self.qsize(0) < 1000:
             proxies = self.proxy_db.select(
                 "select proxy from proxy_pool where state>=1 order by update_time desc limit 1000 ")
@@ -73,5 +100,5 @@ class ProxyPool(Node):
             proxy = self.get(1)
             self.proxy_db.delete({'proxy': proxy})
             self.logger.info("delete {}".format(proxy))
-        job = GetFreeProxy()
+        job = GetFreeProxy(db_path=self.proxy_db.db_path)
         job.run(1)

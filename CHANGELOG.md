@@ -18,4 +18,4 @@
 
 ### 废弃
 
-- 删除旧的 setup.py/twine 发布脚本，构建使用 `uv build`。
+- 删除旧的 setup.py/twine 发布脚本，构建和发布统一使用 `funbuild build`。

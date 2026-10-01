@@ -41,11 +41,23 @@ getHtmlTree = get_html_tree
 class GetFreeProxy:
     """从公开代理源采集代理记录。"""
 
-    def __init__(self) -> None:
-        self.proxy_db = ProxyDB()
+    def __init__(self, db_path: str | None = None) -> None:
+        """创建采集任务。
+
+        Args:
+            db_path: SQLite 文件路径；未提供时由 ProxyDB 解析默认路径。
+        """
+        self.proxy_db = ProxyDB(db_path=db_path)
 
     def run(self, level: int = 5) -> None:
-        """运行指定等级以上的代理采集器并写入代理池。"""
+        """运行指定等级以上的代理采集器并写入代理池。
+
+        Args:
+            level: 要运行的最低采集器等级。
+
+        Returns:
+            None。
+        """
         methods = [(self.free_proxy_01, -1),
                    (self.free_proxy_02, 1),
                    (self.free_proxy_03, 0),
