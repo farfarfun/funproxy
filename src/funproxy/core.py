@@ -32,7 +32,7 @@ class ProxyJob:
 
     def delete_proxy(self) -> None:
         """将当前代理标记为已删除。"""
-        logger.info("删除代理 %s", self.proxy)
+        logger.info("删除代理 {}", self.proxy)
         self.proxy_db.delete({'proxy': self.proxy})
 
     def change_proxy(self, sess: Session) -> None:
@@ -65,7 +65,7 @@ class ProxyJob:
             "http": "http://{}".format(self.proxy),
             "https": "https://{}".format(self.proxy),
         }
-        logger.info("设置代理 %s", self.proxy)
+        logger.info("设置代理 {}", self.proxy)
         return self.proxy
 
 

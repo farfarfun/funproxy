@@ -86,7 +86,7 @@ class GetFreeProxy:
     def test(self) -> None:
         """输出一个采集器发现的代理，用于手工检查。"""
         for proxy in self.free_proxy_15():
-            logger.info("发现代理 %s", proxy)
+            logger.info("发现代理 {}", proxy)
 
     @staticmethod  # -1
     def free_proxy_01() -> Iterator[dict[str, str]]:
@@ -116,7 +116,7 @@ class GetFreeProxy:
                     port = port_sum >> 3
                     yield {'proxy': '{}:{}'.format(ip, port), 'from_url': 'data5u'}
                 except (IndexError, ValueError, AttributeError) as e:
-                    logger.warning("解析代理失败: %s", e)
+                    logger.warning("解析代理失败: {}", e)
 
     @staticmethod  # 1
     def free_proxy_02(count: int = 50) -> Iterator[dict[str, str]]:
@@ -138,7 +138,7 @@ class GetFreeProxy:
                 for ip in ips:
                     yield {'proxy': ip.strip(), 'from_url': '66ip'}
             except (requests.RequestException, AttributeError) as e:
-                logger.warning("读取代理失败: %s", e)
+                logger.warning("读取代理失败: {}", e)
 
     @staticmethod  # 0
     def free_proxy_03(page_count: int = 1) -> Iterator[dict[str, str]]:
@@ -159,7 +159,7 @@ class GetFreeProxy:
                     try:
                         yield {'proxy': ':'.join(proxy.xpath('./td/text()')[0:2]), 'from_url': 'xicidaili'}
                     except (IndexError, ValueError) as e:
-                        logger.warning("解析代理失败: %s", e)
+                        logger.warning("解析代理失败: {}", e)
 
     @staticmethod  # 1
     def free_proxy_04() -> Iterator[dict[str, str]]:
@@ -194,7 +194,7 @@ class GetFreeProxy:
 
                 yield {'proxy': '{}:{}'.format(ip_addr, int(port)), 'from_url': 'goubanjia'}
             except (IndexError, ValueError, TypeError, AttributeError) as e:
-                logger.warning("解析代理失败: %s", e)
+                logger.warning("解析代理失败: {}", e)
 
     @staticmethod  # 1
     def free_proxy_05() -> Iterator[dict[str, str]]:
