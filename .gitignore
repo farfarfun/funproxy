@@ -279,3 +279,4 @@ logs/
 .idea/
 .vscode/
 node_modules/
+uv.lock
