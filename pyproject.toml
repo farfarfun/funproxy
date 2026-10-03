@@ -10,7 +10,7 @@ authors = [{ name = "牛哥", email = "farfarfun@qq.com" }]
 dependencies = ["demjson3>=3.0.6", "farlog>=1.1.7", "funshell>=1.0.19", "lxml>=5.0", "requests>=2.31"]
 
 [dependency-groups]
-dev = ["pytest>=8.0.0", "funbuild>=1.6.66"]
+dev = ["pytest>=8.0.0", "funbuild>=1.6.66", "ruff>=0.16"]
 
 [build-system]
 requires = ["hatchling"]

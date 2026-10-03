@@ -30,7 +30,11 @@ def get_html_tree(url: str) -> etree._Element | None:
               'Accept-Encoding': 'gzip, deflate, sdch',
               'Accept-Language': 'zh-CN,zh;q=0.8',
               }
-    html = requests.get(url=url, headers=header).content
+    try:
+        html = requests.get(url=url, headers=header, timeout=10).content
+    except requests.RequestException as e:
+        logger.warning("请求页面失败 {}: {}", url, e)
+        return None
     return etree.HTML(html)
 
 
@@ -93,7 +97,10 @@ class GetFreeProxy:
         """
         无忧代理 http://www.data5u.com/
         几乎没有能用的
-        :return:
+
+        Returns:
+            Iterator[dict[str, str]]: 形如 ``{'proxy': 'ip:port', 'from_url': 'data5u'}``
+            的代理记录；页面不可达或解析失败时直接跳过，不中断调用方。
         """
         url_list = [
             'http://www.data5u.com/',
@@ -102,7 +109,9 @@ class GetFreeProxy:
         ]
         key = 'ABCDEFGHIZ'
         for url in url_list:
-            html_tree = requests.get(url)
+            html_tree = get_html_tree(url)
+            if html_tree is None:
+                continue
             ul_list = html_tree.xpath('//ul[@class="l2"]')
             for ul in ul_list:
                 try:
@@ -133,7 +142,7 @@ class GetFreeProxy:
 
         for url in urls:
             try:
-                html = requests.get(url.format(count)).text
+                html = requests.get(url.format(count), timeout=10).text
                 ips = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}", html)
                 for ip in ips:
                     yield {'proxy': ip.strip(), 'from_url': '66ip'}
@@ -304,6 +313,13 @@ class GetFreeProxy:
 
     @staticmethod  # -1
     def free_proxy_12() -> Iterator[dict[str, str]]:
+        """
+        proxylistplus https://list.proxylistplus.com/Fresh-HTTP-Proxy-List-1
+
+        Returns:
+            Iterator[dict[str, str]]: 形如 ``{'proxy': 'ip:port', 'from_url': 'proxylistplus'}``
+            的代理记录。
+        """
         urls = ['https://list.proxylistplus.com/Fresh-HTTP-Proxy-List-1']
 
         for url in urls:
@@ -350,6 +366,13 @@ class GetFreeProxy:
 
     @staticmethod  # 1
     def free_proxy_15() -> Iterator[dict[str, str]]:
+        """
+        西拉代理 http://www.xiladaili.com/
+
+        Returns:
+            Iterator[dict[str, str]]: 形如 ``{'proxy': 'ip:port'}`` 的代理记录，
+            不含 ``from_url`` 字段。
+        """
         urls = ['http://www.xiladaili.com/putong/',
                 "http://www.xiladaili.com/gaoni/",
                 "http://www.xiladaili.com/http/",
@@ -377,20 +400,26 @@ class GetFreeProxy:
             'position': 1,
         }
 
-        response = requests.get('http://www.xiladaili.com/api/', params=params, proxies=None, verify=False, )
+        try:
+            response = requests.get('https://www.xiladaili.com/api/', params=params, timeout=10)
+        except requests.RequestException as e:
+            logger.warning("请求 Xila API 失败: {}", e)
+            return
 
         if len(response.text) > 20:
             for proxy in response.text.split(' '):
                 yield {'proxy': proxy, 'from_url': 'xiladaili'}
         else:
-            res = '222.85.28.130:52590 58.220.95.80:9401 58.220.95.86:9401 119.178.101.18:8888 221.122.91.76:9480 58.220.95.78:9401 58.220.95.79:10000 1.119.166.180:8080 183.220.145.3:80 221.122.91.75:10286 150.138.253.71:808 221.122.91.74:9401'
-            for proxy in res.split():
-                yield {'proxy': proxy, 'from_url': 'xiladaili'}
             logger.warning("Xila API 返回内容不足")
 
     @staticmethod  # 1
     def api_proxy_2() -> Iterator[dict[str, str]]:
-        """从齐云代理 API 获取代理，需要环境变量凭据。"""
+        """从齐云代理 API 获取代理，需要环境变量凭据。
+
+        注意：服务商 `dev.qydailiip.com` 未提供可用的 HTTPS 端点（TLS 连接会超时），
+        仅能通过明文 HTTP 请求；`apikey` 会在传输中以明文暴露，请将其视为低信任凭据，
+        并定期在服务商后台轮换。
+        """
         apikey = os.getenv("FUNPROXY_QYDAILI_APIKEY")
         if not apikey:
             logger.warning("未配置 FUNPROXY_QYDAILI_APIKEY，跳过齐云 API")
@@ -414,7 +443,21 @@ class GetFreeProxy:
             'anonymity': '',
         }
 
-        response = requests.get('http://dev.qydailiip.com/api/', params=params, verify=False, )
-        if len(response.text) > 20:
-            for proxy in demjson.decode(response.text):
-                yield {'proxy': proxy, 'from_url': 'qydailiip'}
+        try:
+            response = requests.get('http://dev.qydailiip.com/api/', params=params, timeout=10)
+        except requests.RequestException as e:
+            logger.warning("请求齐云 API 失败: {}", e)
+            return
+
+        if len(response.text) <= 20:
+            logger.warning("齐云 API 返回内容不足")
+            return
+
+        try:
+            proxies = demjson.decode(response.text)
+        except demjson.JSONDecodeError as e:
+            logger.warning("解析齐云 API 响应失败: {}", e)
+            return
+
+        for proxy in proxies:
+            yield {'proxy': proxy, 'from_url': 'qydailiip'}
