@@ -13,6 +13,15 @@ from funproxy.database import ProxyDB
 logger = getLogger("funproxy")
 
 
+def _get_response_text(url: str) -> str | None:
+    """获取页面文本；请求失败时记录来源并返回空值。"""
+    try:
+        return requests.get(url, timeout=10).text
+    except requests.RequestException as e:
+        logger.warning("请求页面失败 {}: {}", url, e)
+        return None
+
+
 def get_html_tree(url: str) -> etree._Element | None:
     """请求 URL 并解析为 HTML 节点树。
 
@@ -83,9 +92,14 @@ class GetFreeProxy:
         for line in methods:
             if line[1] >= level:
                 method = line[0]
-                for proxy in method():
-                    if isinstance(proxy, dict) and len(proxy['proxy']) > 5:
-                        self.proxy_db.insert(proxy)
+                try:
+                    for proxy in method():
+                        if isinstance(proxy, dict) and len(proxy['proxy']) > 5:
+                            self.proxy_db.insert(proxy)
+                except (
+                    AttributeError, IndexError, KeyError, TypeError, ValueError
+                ) as e:
+                    logger.warning("采集器 {} 解析失败，已跳过: {}", method.__name__, e)
 
     def test(self) -> None:
         """输出一个采集器发现的代理，用于手工检查。"""
@@ -129,10 +143,13 @@ class GetFreeProxy:
 
     @staticmethod  # 1
     def free_proxy_02(count: int = 50) -> Iterator[dict[str, str]]:
-        """
-        代理66 http://www.66ip.cn/
-        :param count: 提取数量
-        :return:
+        """从 66ip 采集指定数量的代理。
+
+        Args:
+            count: 每个接口请求的代理数量。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求失败时跳过该接口。
         """
         urls = [
             "http://www.66ip.cn/mo.php?sxb=&tqsl={}&port=&export=&ktip=&sxa=&submit=%CC%E1++%C8%A1&textarea=",
@@ -141,19 +158,22 @@ class GetFreeProxy:
         ]
 
         for url in urls:
-            try:
-                html = requests.get(url.format(count), timeout=10).text
-                ips = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}", html)
-                for ip in ips:
-                    yield {'proxy': ip.strip(), 'from_url': '66ip'}
-            except (requests.RequestException, AttributeError) as e:
-                logger.warning("读取代理失败: {}", e)
+            html = _get_response_text(url.format(count))
+            if html is None:
+                continue
+            ips = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}", html)
+            for ip in ips:
+                yield {'proxy': ip.strip(), 'from_url': '66ip'}
 
     @staticmethod  # 0
     def free_proxy_03(page_count: int = 1) -> Iterator[dict[str, str]]:
-        """
-        西刺代理 http://www.xicidaili.com
-        :return:
+        """从西刺代理的高匿和透明列表采集代理。
+
+        Args:
+            page_count: 每个列表采集的页数。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求或页面解析失败时跳过该页。
         """
         url_list = [
             'http://www.xicidaili.com/nn/',  # 高匿
@@ -163,6 +183,8 @@ class GetFreeProxy:
             for i in range(1, page_count + 1):
                 page_url = each_url + str(i)
                 tree = get_html_tree(page_url)
+                if tree is None:
+                    continue
                 proxy_list = tree.xpath('.//table[@id="ip_list"]//tr[position()>1]')
                 for proxy in proxy_list:
                     try:
@@ -172,23 +194,17 @@ class GetFreeProxy:
 
     @staticmethod  # 1
     def free_proxy_04() -> Iterator[dict[str, str]]:
+        """从 goubanjia 采集并解码混淆端口的代理。
 
-        """
-        # 此网站有隐藏的数字干扰，或抓取到多余的数字或.符号
-        # 需要过滤掉<p style="display:none;">的内容
-
-        # :符号裸放在td下，其他放在div span p中，先分割找出ip，再找port
-
-        # HTML中的port是随机数，真正的端口编码在class后面的字母中。
-        # 比如这个：
-        # <span class="port CFACE">9054</span>
-        # CFACE解码后对应的是3128。
-        guobanjia http://www.goubanjia.com/
-        :return:
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求或页面解析失败时跳过来源或
+            记录。
         """
         url = "http://www.goubanjia.com/"
 
         tree = get_html_tree(url)
+        if tree is None:
+            return
         proxy_list = tree.xpath('//td[@class="ip"]')
         xpath_str = """.//*[not(contains(@style, 'display: none')) and not(contains(@style, 'display:none'))
                                         and not(contains(@class, 'port')) ]/text()"""
@@ -207,8 +223,10 @@ class GetFreeProxy:
 
     @staticmethod  # 1
     def free_proxy_05() -> Iterator[dict[str, str]]:
-        """
-        快代理 https://www.kuaidaili.com
+        """从快代理的高匿和透明列表采集代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求或页面解析失败时跳过该页。
         """
         url_list = [
             'https://www.kuaidaili.com/free/inha/',
@@ -216,42 +234,57 @@ class GetFreeProxy:
         ]
         for url in url_list:
             tree = get_html_tree(url)
+            if tree is None:
+                continue
             proxy_list = tree.xpath('.//table//tr')
             sleep(1)  # 必须sleep 不然第二条请求不到数据
             for tr in proxy_list[1:]:
-                yield {'proxy': ':'.join(tr.xpath('./td/text()')[0:2]), 'from_url': 'kuaidaili'}
+                try:
+                    yield {'proxy': ':'.join(tr.xpath('./td/text()')[0:2]), 'from_url': 'kuaidaili'}
+                except (AttributeError, IndexError, TypeError) as e:
+                    logger.warning("解析代理失败 {}: {}", url, e)
 
     @staticmethod  # 0
     def free_proxy_06() -> Iterator[dict[str, str]]:
-        """
-        码农代理 https://proxy.coderbusy.com/
-        :return:
+        """从码农代理采集代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求或页面解析失败时跳过该页。
         """
         urls = ['https://proxy.coderbusy.com/']
         for url in urls:
             tree = get_html_tree(url)
+            if tree is None:
+                continue
             proxy_list = tree.xpath('.//table//tr')
             for tr in proxy_list[1:]:
-                yield {'proxy': ':'.join(tr.xpath('./td/text()')[0:2]), 'from_url': 'proxy.coderbusy'}
+                try:
+                    yield {'proxy': ':'.join(tr.xpath('./td/text()')[0:2]), 'from_url': 'proxy.coderbusy'}
+                except (AttributeError, IndexError, TypeError) as e:
+                    logger.warning("解析代理失败 {}: {}", url, e)
 
     @staticmethod  # 1
     def free_proxy_07() -> Iterator[dict[str, str]]:
-        """
-        云代理 http://www.ip3366.net/free/
-        :return:
+        """从 ip3366 的不同匿名级别列表采集代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求失败时跳过该页。
         """
         urls = ['http://www.ip3366.net/free/?stype=1', "http://www.ip3366.net/free/?stype=2"]
         for url in urls:
-            r = requests.get(url, timeout=10)
-            proxies = re.findall(r'<td>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\s\S]*?<td>(\d+)</td>', r.text)
+            text = _get_response_text(url)
+            if text is None:
+                continue
+            proxies = re.findall(r'<td>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\s\S]*?<td>(\d+)</td>', text)
             for proxy in proxies:
                 yield {'proxy': ':'.join(proxy), 'from_url': 'ip3366'}
 
     @staticmethod  # 0
     def free_proxy_08() -> Iterator[dict[str, str]]:
-        """
-        IP海 http://www.iphai.com/free/ng
-        :return:
+        """从 IP 海的不同代理列表采集代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求失败时跳过该页。
         """
         urls = [
             'http://www.iphai.com/free/ng',
@@ -261,131 +294,166 @@ class GetFreeProxy:
         ]
 
         for url in urls:
-            r = requests.get(url, timeout=10)
+            text = _get_response_text(url)
+            if text is None:
+                continue
             proxies = re.findall(r'<td>\s*?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s*?</td>[\s\S]*?<td>\s*?(\d+)\s*?</td>',
-                                 r.text)
+                                 text)
             for proxy in proxies:
                 yield {'proxy': ':'.join(proxy), 'from_url': 'iphai'}
 
     @staticmethod  # 1
     def free_proxy_09(page_count: int = 1) -> Iterator[dict[str, str]]:
-        """
-        http://ip.jiangxianli.com/?page=
-        免费代理库
-        :return:
+        """从免费代理库按页采集代理。
+
+        Args:
+            page_count: 要采集的页数。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求或页面解析失败时跳过该页。
         """
         for i in range(1, page_count + 1):
             url = 'http://ip.jiangxianli.com/?country=中国&?page={}'.format(i)
             html_tree = get_html_tree(url)
+            if html_tree is None:
+                continue
             for index, tr in enumerate(html_tree.xpath("//table//tr")):
                 if index == 0:
                     continue
-                yield {'proxy': ":".join(tr.xpath("./td/text()")[0:2]).strip(), 'from_url': 'jiangxianli'}
+                try:
+                    yield {'proxy': ":".join(tr.xpath("./td/text()")[0:2]).strip(), 'from_url': 'jiangxianli'}
+                except (AttributeError, IndexError, TypeError) as e:
+                    logger.warning("解析代理失败 {}: {}", url, e)
 
     @staticmethod  # -1
     def free_proxy_10() -> Iterator[dict[str, str]]:
-        """
-        墙外网站 cn-proxy
-        :return:
+        """从 cn-proxy 的公开页面采集代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求失败时跳过该页。
         """
         urls = ['http://cn-proxy.com/', 'http://cn-proxy.com/archives/218']
 
         for url in urls:
-            r = requests.get(url, timeout=10)
-            proxies = re.findall(r'<td>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\w\W]<td>(\d+)</td>', r.text)
+            text = _get_response_text(url)
+            if text is None:
+                continue
+            proxies = re.findall(r'<td>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\w\W]<td>(\d+)</td>', text)
             for proxy in proxies:
                 yield {'proxy': ':'.join(proxy), 'from_url': 'cn-proxy'}
 
     @staticmethod  # 0
     def free_proxy_11() -> Iterator[dict[str, str]]:
-        """
-        https://proxy-list.org/english/index.php
-        :return:
+        """从 proxy-list.org 采集 Base64 编码的代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求或解码失败时跳过对应页面或
+            记录。
         """
         urls = ['https://proxy-list.org/english/index.php?p=%s' % n for n in range(1, 10)]
 
         import base64
         for url in urls:
-            r = requests.get(url, timeout=10)
-            proxies = re.findall(r"Proxy\('(.*?)'\)", r.text)
+            text = _get_response_text(url)
+            if text is None:
+                continue
+            proxies = re.findall(r"Proxy\('(.*?)'\)", text)
             for proxy in proxies:
-                yield {'proxy': base64.b64decode(proxy).decode(), 'from_url': 'proxy-list'}
+                try:
+                    yield {'proxy': base64.b64decode(proxy).decode(), 'from_url': 'proxy-list'}
+                except (UnicodeDecodeError, ValueError) as e:
+                    logger.warning("解析代理失败 {}: {}", url, e)
 
     @staticmethod  # -1
     def free_proxy_12() -> Iterator[dict[str, str]]:
-        """
-        proxylistplus https://list.proxylistplus.com/Fresh-HTTP-Proxy-List-1
+        """从 proxylistplus 采集 HTTP 代理。
 
         Returns:
             Iterator[dict[str, str]]: 形如 ``{'proxy': 'ip:port', 'from_url': 'proxylistplus'}``
-            的代理记录。
+            的代理记录；请求失败时跳过该页。
         """
         urls = ['https://list.proxylistplus.com/Fresh-HTTP-Proxy-List-1']
 
         for url in urls:
-            r = requests.get(url, timeout=10)
-            proxies = re.findall(r'<td>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\s\S]*?<td>(\d+)</td>', r.text)
+            text = _get_response_text(url)
+            if text is None:
+                continue
+            proxies = re.findall(r'<td>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\s\S]*?<td>(\d+)</td>', text)
             for proxy in proxies:
                 yield {'proxy': ':'.join(proxy), 'from_url': 'proxylistplus'}
 
     @staticmethod  # 1
     def free_proxy_13(max_page: int = 2) -> Iterator[dict[str, str]]:
-        """
-        http://www.qydaili.com/free/?action=china&page=1
-        齐云代理
-        :param max_page:
-        :return:
+        """从齐云代理按页采集中国代理。
+
+        Args:
+            max_page: 要采集的最大页数。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求失败时跳过该页。
         """
         base_url = 'http://www.qydaili.com/free/?action=china&page='
 
         for page in range(1, max_page + 1):
             url = base_url + str(page)
-            r = requests.get(url, timeout=10)
-            proxies = re.findall(r'<td.*?>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\s\S]*?<td.*?>(\d+)</td>', r.text)
+            text = _get_response_text(url)
+            if text is None:
+                continue
+            proxies = re.findall(r'<td.*?>(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})</td>[\s\S]*?<td.*?>(\d+)</td>', text)
             for proxy in proxies:
                 yield {'proxy': ':'.join(proxy), 'from_url': 'qydaili'}
 
     @staticmethod  # 1
     def free_proxy_14(max_page: int = 2) -> Iterator[dict[str, str]]:
-        """
-        http://www.89ip.cn/index.html
-        89免费代理
-        :param max_page:
-        :return:
+        """从 89 免费代理按页采集代理。
+
+        Args:
+            max_page: 要采集的最大页数。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；请求失败时跳过该页。
         """
         base_url = 'http://www.89ip.cn/index_{}.html'
 
         for page in range(1, max_page + 1):
             url = base_url.format(page)
-            r = requests.get(url, timeout=10)
+            text = _get_response_text(url)
+            if text is None:
+                continue
             proxies = re.findall(
                 r'<td.*?>[\s\S]*?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\s\S]*?</td>[\s\S]*?<td.*?>[\s\S]*?(\d+)[\s\S]*?</td>',
-                r.text)
+                text)
             for proxy in proxies:
                 yield {'proxy': ':'.join(proxy), 'from_url': '89ip'}
 
     @staticmethod  # 1
     def free_proxy_15() -> Iterator[dict[str, str]]:
-        """
-        西拉代理 http://www.xiladaili.com/
+        """从西拉代理的公开列表采集代理。
 
         Returns:
             Iterator[dict[str, str]]: 形如 ``{'proxy': 'ip:port'}`` 的代理记录，
-            不含 ``from_url`` 字段。
+            不含 ``from_url`` 字段；请求失败时跳过该页。
         """
         urls = ['http://www.xiladaili.com/putong/',
                 "http://www.xiladaili.com/gaoni/",
                 "http://www.xiladaili.com/http/",
                 "http://www.xiladaili.com/https/"]
         for url in urls:
-            r = requests.get(url, timeout=10)
-            ips = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}", r.text)
+            text = _get_response_text(url)
+            if text is None:
+                continue
+            ips = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}", text)
             for ip in ips:
                 yield {'proxy': ip.strip()}
 
     @staticmethod  # 1
     def api_proxy_1() -> Iterator[dict[str, str]]:
-        """从 Xila 代理 API 获取代理，需要环境变量凭据。"""
+        """从 Xila 代理 API 获取代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；未配置凭据、请求失败或响应不足时
+            不返回记录。
+        """
         uuid = os.getenv("FUNPROXY_XILA_UUID")
         if not uuid:
             logger.warning("未配置 FUNPROXY_XILA_UUID，跳过 Xila API")
@@ -414,7 +482,11 @@ class GetFreeProxy:
 
     @staticmethod  # 1
     def api_proxy_2() -> Iterator[dict[str, str]]:
-        """从齐云代理 API 获取代理，需要环境变量凭据。
+        """从齐云代理 API 获取代理。
+
+        Returns:
+            含 ``proxy`` 和 ``from_url`` 的代理记录；未配置凭据、请求或 JSON 解析失败时
+            不返回记录。
 
         注意：服务商 `dev.qydailiip.com` 未提供可用的 HTTPS 端点（TLS 连接会超时），
         仅能通过明文 HTTP 请求；`apikey` 会在传输中以明文暴露，请将其视为低信任凭据，

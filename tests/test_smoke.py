@@ -110,6 +110,55 @@ def test_free_proxy_01_skips_page_on_request_failure(monkeypatch) -> None:
     assert list(GetFreeProxy.free_proxy_01()) == []
 
 
+@pytest.mark.parametrize(
+    "collector",
+    [
+        "free_proxy_02",
+        "free_proxy_07",
+        "free_proxy_08",
+        "free_proxy_10",
+        "free_proxy_11",
+        "free_proxy_12",
+        "free_proxy_13",
+        "free_proxy_14",
+        "free_proxy_15",
+    ],
+)
+def test_free_proxy_collectors_skip_request_failures(
+    monkeypatch, collector: str
+) -> None:
+    """直接请求页面的采集器在来源不可达时应继续并返回空结果。"""
+    from funproxy.job import GetFreeProxy
+
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *_a, **_k: (_ for _ in ()).throw(requests.RequestException("boom")),
+    )
+    assert list(getattr(GetFreeProxy, collector)()) == []
+
+
+@pytest.mark.parametrize(
+    "collector",
+    [
+        "free_proxy_03",
+        "free_proxy_04",
+        "free_proxy_05",
+        "free_proxy_06",
+        "free_proxy_09",
+    ],
+)
+def test_free_proxy_collectors_skip_empty_html_tree(
+    monkeypatch, collector: str
+) -> None:
+    """依赖 HTML 树的采集器在解析失败时应跳过来源。"""
+    from funproxy import job
+    from funproxy.job import GetFreeProxy
+
+    monkeypatch.setattr(job, "get_html_tree", lambda _url: None)
+    assert list(getattr(GetFreeProxy, collector)()) == []
+
+
 def test_get_html_tree_returns_none_on_request_failure(monkeypatch) -> None:
     from funproxy.job import get_html_tree, getHtmlTree
 
@@ -152,6 +201,33 @@ def test_get_free_proxy_run_skips_malformed_proxy(monkeypatch, tmp_path) -> None
     job_instance.run(level=5)
 
     assert inserted == []
+
+
+def test_get_free_proxy_run_continues_after_collector_parse_failure(
+    monkeypatch, tmp_path
+) -> None:
+    """单个采集器的解析异常不应阻止后续来源写入代理。"""
+    from funproxy.job import GetFreeProxy
+
+    def fail_collector():
+        raise ValueError("invalid source response")
+        yield  # pragma: no cover
+
+    job_instance = GetFreeProxy(db_path=str(tmp_path / "proxy.db"))
+    inserted = []
+    monkeypatch.setattr(
+        job_instance.proxy_db, "insert", lambda proxy: inserted.append(proxy)
+    )
+    monkeypatch.setattr(GetFreeProxy, "api_proxy_1", staticmethod(fail_collector))
+    monkeypatch.setattr(
+        GetFreeProxy,
+        "api_proxy_2",
+        staticmethod(lambda: iter([{"proxy": "1.2.3.4:80", "from_url": "qydailiip"}])),
+    )
+
+    job_instance.run(level=5)
+
+    assert inserted == [{"proxy": "1.2.3.4:80", "from_url": "qydailiip"}]
 
 
 def test_api_proxy_1_success_path(monkeypatch) -> None:
