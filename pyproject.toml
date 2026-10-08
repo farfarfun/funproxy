@@ -1,7 +1,7 @@
 [project]
 name = "funproxy"
 version = "0.0.4"
-description = "funproxy"
+description = "免费代理池：从十余个免费代理站点抓取校验 IP 并存入 SQLite，提供按可用性排序取用与失效自动切换的 requests 会话集成"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
