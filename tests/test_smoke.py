@@ -292,10 +292,7 @@ def test_verify_proxy_format_alias_is_same_function() -> None:
     assert verifyProxyFormat is verify_proxy_format
 
 
-def test_proxy_pool_constructs_with_injected_db_path(tmp_path) -> None:
-    """ProxyPool 在无 notetool 依赖时仍应能构造，并使用注入的数据库路径。"""
-    from funproxy.core import ProxyPool
+def test_core_does_not_export_unavailable_proxy_pool() -> None:
+    import funproxy.core as core
 
-    db_path = str(tmp_path / "proxy.db")
-    pool = ProxyPool(db_path=db_path)
-    assert pool.proxy_db.db_path == db_path
+    assert not hasattr(core, "ProxyPool")

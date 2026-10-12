@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.0.4]
+
 ### 新增
 
 - 增加代理格式、SQLite 代理池和 API 凭据环境变量的测试。
@@ -33,6 +35,7 @@
 ### 变更
 
 - **Breaking:** Renamed the import package and PyPI distribution name from `noteproxy` to `funproxy` to match the repository name. Anyone doing `import noteproxy` or `pip install noteproxy` must switch to `import funproxy` / `pip install funproxy`.
+- 移除依赖未发布 `notetool` 的 `ProxyPool` 队列集成；该功能此前无法在正常安装中运行。
 
 ### 废弃
 

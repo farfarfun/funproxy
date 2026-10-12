@@ -1,17 +1,8 @@
 from requests import Session
 from farlog import getLogger
-from typing import Any
 
 from funproxy.database import ProxyDB
 from funproxy.job import GetFreeProxy
-try:
-    from notetool.crawler.core import Node
-except ImportError:
-    class Node:
-        """无 notetool 时保证代理池模块可导入的兼容基类。"""
-
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            pass
 
 
 logger = getLogger("funproxy")
@@ -69,36 +60,4 @@ class ProxyJob:
         return self.proxy
 
 
-class ProxyPool(Node):
-    """向 notetool 节点队列提供代理任务。"""
-
-    def __init__(self, *args: Any, db_path: str | None = None, **kwargs: Any) -> None:
-        """创建代理池节点。
-
-        Args:
-            *args: 传给 notetool Node 的位置参数。
-            db_path: SQLite 文件路径；未提供时由 ProxyDB 解析默认路径。
-            **kwargs: 传给 notetool Node 的关键字参数。
-        """
-        super(ProxyPool, self).__init__(*args, **kwargs)
-        self.proxy_db = ProxyDB(db_path=db_path)
-
-    def job(self) -> None:
-        """从代理池读取、投递并删除已处理的代理。
-
-        Returns:
-            None。
-        """
-        if self.qsize(0) < 1000:
-            proxies = self.proxy_db.select(
-                "select proxy from proxy_pool where state>=1 order by update_time desc limit 1000 ")
-
-            for proxy in proxies:
-                self.put(proxy[0], index=0)
-
-        while self.not_empty(1):
-            proxy = self.get(1)
-            self.proxy_db.delete({'proxy': proxy})
-            self.logger.info("delete {}".format(proxy))
-        job = GetFreeProxy(db_path=self.proxy_db.db_path)
-        job.run(1)
+__all__ = ["ProxyJob"]
